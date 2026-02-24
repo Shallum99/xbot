@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v3"
