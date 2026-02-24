@@ -372,8 +372,8 @@ type CustomAgent struct {
 
 func (a *CustomAgent) Name() string { return "custom" }
 
-func (a *CustomAgent) Run(ctx context.Context, bugDesc string, mediaFiles []string, repo string, branchName string) (*AgentResult, error) {
-	prompt := buildPrompt(bugDesc, "", mediaFiles, branchName, repo)
+func (a *CustomAgent) Run(ctx context.Context, bugDesc string, founderNote string, mediaFiles []string, repo string, branchName string) (*AgentResult, error) {
+	prompt := buildPrompt(bugDesc, founderNote, mediaFiles, branchName, repo)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
