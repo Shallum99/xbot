@@ -176,7 +176,7 @@ func (h *Handler) Process(ctx context.Context, trigger ParsedTweet) error {
 		prompt = fmt.Sprintf("Bug from @%s: %s", bugAuthor, bugText)
 	}
 
-	result, err := h.Agent.Run(ctx, prompt, mediaFiles, h.Config.Repo, branchName)
+	result, err := h.Agent.Run(ctx, prompt, founderNote, mediaFiles, h.Config.Repo, branchName)
 	if err != nil {
 		h.Logger.Printf("[ERROR] Agent failed: %v", err)
 		if result != nil && result.Output != "" {
@@ -186,8 +186,6 @@ func (h *Handler) Process(ctx context.Context, trigger ParsedTweet) error {
 		_ = h.State.Save()
 		return fmt.Errorf("agent failed: %w", err)
 	}
-
-	_ = founderNote // reserved for future enhanced prompts
 
 	if result.PRLink != "" {
 		h.Logger.Printf("[DONE] PR created: %s", result.PRLink)

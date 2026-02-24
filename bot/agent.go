@@ -34,7 +34,7 @@ type AgentResult struct {
 // Agent is the interface for coding agents that fix bugs.
 type Agent interface {
 	Name() string
-	Run(ctx context.Context, bugDesc string, mediaFiles []string, repo string, branchName string) (*AgentResult, error)
+	Run(ctx context.Context, bugDesc string, founderNote string, mediaFiles []string, repo string, branchName string) (*AgentResult, error)
 }
 
 // maxAgentOutput is the maximum bytes captured from agent stdout+stderr (10MB).
@@ -301,8 +301,8 @@ type ClaudeAgent struct{}
 
 func (a *ClaudeAgent) Name() string { return "claude" }
 
-func (a *ClaudeAgent) Run(ctx context.Context, bugDesc string, mediaFiles []string, repo string, branchName string) (*AgentResult, error) {
-	prompt := buildPrompt(bugDesc, "", mediaFiles, branchName, repo)
+func (a *ClaudeAgent) Run(ctx context.Context, bugDesc string, founderNote string, mediaFiles []string, repo string, branchName string) (*AgentResult, error) {
+	prompt := buildPrompt(bugDesc, founderNote, mediaFiles, branchName, repo)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -325,8 +325,8 @@ type CodexAgent struct{}
 
 func (a *CodexAgent) Name() string { return "codex" }
 
-func (a *CodexAgent) Run(ctx context.Context, bugDesc string, mediaFiles []string, repo string, branchName string) (*AgentResult, error) {
-	prompt := buildPrompt(bugDesc, "", mediaFiles, branchName, repo)
+func (a *CodexAgent) Run(ctx context.Context, bugDesc string, founderNote string, mediaFiles []string, repo string, branchName string) (*AgentResult, error) {
+	prompt := buildPrompt(bugDesc, founderNote, mediaFiles, branchName, repo)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -348,8 +348,8 @@ type GeminiAgent struct{}
 
 func (a *GeminiAgent) Name() string { return "gemini" }
 
-func (a *GeminiAgent) Run(ctx context.Context, bugDesc string, mediaFiles []string, repo string, branchName string) (*AgentResult, error) {
-	prompt := buildPrompt(bugDesc, "", mediaFiles, branchName, repo)
+func (a *GeminiAgent) Run(ctx context.Context, bugDesc string, founderNote string, mediaFiles []string, repo string, branchName string) (*AgentResult, error) {
+	prompt := buildPrompt(bugDesc, founderNote, mediaFiles, branchName, repo)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -372,8 +372,8 @@ type CustomAgent struct {
 
 func (a *CustomAgent) Name() string { return "custom" }
 
-func (a *CustomAgent) Run(ctx context.Context, bugDesc string, mediaFiles []string, repo string, branchName string) (*AgentResult, error) {
-	prompt := buildPrompt(bugDesc, "", mediaFiles, branchName, repo)
+func (a *CustomAgent) Run(ctx context.Context, bugDesc string, founderNote string, mediaFiles []string, repo string, branchName string) (*AgentResult, error) {
+	prompt := buildPrompt(bugDesc, founderNote, mediaFiles, branchName, repo)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
