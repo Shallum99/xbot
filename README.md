@@ -86,9 +86,7 @@ go build -o xbot .
 
 1. **X API credentials** — Create an app at [developer.x.com](https://developer.x.com). You need a Client ID and Client Secret with OAuth 2.0 enabled.
 
-2. **xurl** — Used for X API authentication. Install with `go install github.com/xdevplatform/xurl@latest`.
-
-3. **A coding agent** — At least one of:
+2. **A coding agent** — At least one of:
    - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`)
    - [Codex](https://github.com/openai/codex) (`codex`)
    - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`)
