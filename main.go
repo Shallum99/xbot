@@ -33,13 +33,9 @@ How it works:
   4. A PR is created automatically
 
 Setup:
+  xbot auth --client-id YOUR_ID --client-secret YOUR_SECRET
   xbot init --handle your_handle --repo /path/to/project
-  xbot start
-
-Requires xurl authentication:
-  xurl auth app my-app --client-id ID --client-secret SECRET
-  xurl auth default my-app
-  xurl auth oauth2`,
+  xbot start`,
 	}
 
 	rootCmd.AddCommand(authCmd())
