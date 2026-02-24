@@ -379,9 +379,9 @@ func TestLimitedBuffer_CapsOutput(t *testing.T) {
 
 func TestLimitedBuffer_MultipleWrites(t *testing.T) {
 	buf := newLimitedBuffer(10)
-	buf.Write([]byte("12345"))
-	buf.Write([]byte("67890"))
-	buf.Write([]byte("overflow"))
+	_, _ = buf.Write([]byte("12345"))
+	_, _ = buf.Write([]byte("67890"))
+	_, _ = buf.Write([]byte("overflow"))
 	if buf.String() != "1234567890" {
 		t.Errorf("expected '1234567890', got %q", buf.String())
 	}
