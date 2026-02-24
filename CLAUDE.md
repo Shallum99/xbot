@@ -20,6 +20,7 @@ bot/poller.go    → Polling loop with exponential backoff + graceful shutdown
 - `github.com/xdevplatform/xurl/api` — Client interface, RequestOptions, NewApiClient
 - `github.com/xdevplatform/xurl/auth` — Auth, NewAuth (OAuth2 token management)
 - `github.com/xdevplatform/xurl/config` — Config, NewConfig (env var loading)
+- `github.com/xdevplatform/xurl/store` — TokenStore, app credential + token persistence
 - `github.com/spf13/cobra` — CLI framework
 - `gopkg.in/yaml.v3` — Config/state serialization
 
