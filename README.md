@@ -12,10 +12,7 @@ A user reports a bug on X. You reply `fix: description`. A coding agent fixes it
 # One-liner (Linux/macOS)
 curl -sSfL https://raw.githubusercontent.com/Shallum99/xbot/main/install.sh | sh
 
-# Homebrew (macOS/Linux)
-brew install Shallum99/tap/xbot
-
-# Go
+# Or with Go
 go install github.com/Shallum99/xbot@latest
 ```
 
