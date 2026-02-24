@@ -9,10 +9,17 @@ A user reports a bug on X. You reply `fix: description`. A coding agent fixes it
 **1. Install**
 
 ```bash
-# One-liner (Linux/macOS)
+# Linux/macOS
 curl -sSfL https://raw.githubusercontent.com/Shallum99/xbot/main/install.sh | sh
+```
 
-# Or with Go
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/Shallum99/xbot/main/install.ps1 | iex
+```
+
+```bash
+# Or with Go (any platform)
 go install github.com/Shallum99/xbot@latest
 ```
 
