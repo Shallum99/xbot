@@ -13,6 +13,9 @@ bot/tweet.go     → ParsedTweet, ParseSearchResponse, FetchParentTweet, Extract
 bot/agent.go     → Agent interface + ClaudeAgent, CodexAgent, GeminiAgent, CustomAgent
 bot/handler.go   → Pipeline: fetch parent → download media → run agent → log PR
 bot/poller.go    → Polling loop with exponential backoff + graceful shutdown
+bot/service.go   → Background service management (systemd/launchd install/start/stop)
+bot/lock_unix.go → File locking (flock) for Linux/macOS
+bot/lock_windows.go → File locking stub for Windows
 ```
 
 ## Key Dependencies
