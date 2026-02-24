@@ -84,11 +84,9 @@ No separate bot account needed. xbot uses your own X authentication — if you c
 
 ## Prerequisites
 
-1. **Go 1.24+** — [Install Go](https://go.dev/dl/)
+1. **X API credentials** — Create an app at [developer.x.com](https://developer.x.com) with OAuth 2.0 enabled
 
-2. **X API credentials** — Create an app at [developer.x.com](https://developer.x.com) with OAuth 2.0 enabled
-
-3. **A coding agent** — At least one of:
+2. **A coding agent** — At least one of:
    - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`) — default
    - [Codex](https://github.com/openai/codex) (`codex`)
    - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`)
