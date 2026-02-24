@@ -63,6 +63,78 @@ func newClient() (api.Client, api.RequestOptions) {
 	return client, opts
 }
 
+// ─── auth ────────────────────────────────────────────────────────
+
+func authCmd() *cobra.Command {
+	var (
+		clientID     string
+		clientSecret string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "auth",
+		Short: "Authenticate with X (Twitter) API",
+		Long: `Set up X API authentication. Registers your app credentials and runs the OAuth2 flow.
+
+Get your Client ID and Client Secret from https://developer.x.com
+
+Examples:
+  xbot auth --client-id YOUR_ID --client-secret YOUR_SECRET`,
+		Run: func(cmd *cobra.Command, args []string) {
+			if clientID == "" || clientSecret == "" {
+				fmt.Fprintf(os.Stderr, "\033[31mError: --client-id and --client-secret are required\033[0m\n")
+				fmt.Fprintf(os.Stderr, "\nGet your credentials at https://developer.x.com\n")
+				os.Exit(1)
+			}
+
+			// Register app in xurl's token store (~/.xurl)
+			ts := store.NewTokenStore()
+			appName := "xbot"
+
+			if existing := ts.GetApp(appName); existing != nil {
+				if err := ts.UpdateApp(appName, clientID, clientSecret); err != nil {
+					fmt.Fprintf(os.Stderr, "\033[31mError updating app: %v\033[0m\n", err)
+					os.Exit(1)
+				}
+			} else {
+				if err := ts.AddApp(appName, clientID, clientSecret); err != nil {
+					fmt.Fprintf(os.Stderr, "\033[31mError registering app: %v\033[0m\n", err)
+					os.Exit(1)
+				}
+			}
+
+			if err := ts.SetDefaultApp(appName); err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mError setting default app: %v\033[0m\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Println("App credentials saved.")
+			fmt.Println("Starting OAuth2 flow — your browser will open...")
+			fmt.Println()
+
+			// Run OAuth2 PKCE flow
+			cfg := config.NewConfig()
+			a := auth.NewAuth(cfg).WithAppName(appName)
+			a.WithTokenStore(ts)
+
+			_, err := a.OAuth2Flow("")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mOAuth2 error: %v\033[0m\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Println()
+			fmt.Printf("\033[32mAuthenticated!\033[0m\n")
+			fmt.Printf("\nNext: run '\033[1mxbot init --handle your_handle --repo /path/to/project\033[0m'\n")
+		},
+	}
+
+	cmd.Flags().StringVar(&clientID, "client-id", "", "X API Client ID (required)")
+	cmd.Flags().StringVar(&clientSecret, "client-secret", "", "X API Client Secret (required)")
+
+	return cmd
+}
+
 // ─── init ────────────────────────────────────────────────────────
 
 func initCmd() *cobra.Command {
