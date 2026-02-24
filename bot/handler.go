@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
@@ -11,13 +12,22 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/xdevplatform/xurl/api"
 )
 
 // maxMediaFileSize is the maximum size of a single media download (50MB).
 const maxMediaFileSize = 50 * 1024 * 1024
+
+// maxMediaURLs is the maximum number of media URLs to process per tweet (M4).
+const maxMediaURLs = 10
+
+// defaultMaxRunsPerHour is the default rate limit for agent executions (H4/L3).
+const defaultMaxRunsPerHour = 10
 
 // allowedMediaHosts is the set of hosts we allow media downloads from.
 // C2: Prevents SSRF by restricting downloads to known X/Twitter media domains.
@@ -28,6 +38,17 @@ var allowedMediaHosts = map[string]bool{
 	"ton.twimg.com":   true,
 }
 
+// allowedMediaExtensions is the allowlist of file extensions for downloaded media (M5).
+var allowedMediaExtensions = map[string]bool{
+	".jpg":  true,
+	".jpeg": true,
+	".png":  true,
+	".gif":  true,
+	".mp4":  true,
+	".webm": true,
+	".webp": true,
+}
+
 // Handler processes individual tweets through the bot pipeline.
 type Handler struct {
 	Config *BotConfig
@@ -36,12 +57,59 @@ type Handler struct {
 	Opts   api.RequestOptions
 	Agent  Agent
 	Logger *log.Logger
+
+	// H4/L3: Rate limiting for agent executions
+	rateMu        sync.Mutex
+	runTimestamps []time.Time
+}
+
+// checkRateLimit checks if agent runs are within the hourly limit (H4/L3).
+// Finding #3: Does NOT consume a slot — call recordAgentRun() when the agent actually starts.
+func (h *Handler) checkRateLimit() error {
+	h.rateMu.Lock()
+	defer h.rateMu.Unlock()
+
+	now := time.Now()
+	cutoff := now.Add(-1 * time.Hour)
+
+	// Prune old timestamps
+	valid := h.runTimestamps[:0]
+	for _, t := range h.runTimestamps {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	h.runTimestamps = valid
+
+	if len(h.runTimestamps) >= defaultMaxRunsPerHour {
+		return fmt.Errorf("rate limit exceeded: %d agent runs in the last hour (max %d)", len(h.runTimestamps), defaultMaxRunsPerHour)
+	}
+
+	return nil
+}
+
+// recordAgentRun records that an agent execution is starting.
+func (h *Handler) recordAgentRun() {
+	h.rateMu.Lock()
+	defer h.rateMu.Unlock()
+	h.runTimestamps = append(h.runTimestamps, time.Now())
 }
 
 // Process handles a single trigger tweet: fetches the parent bug report,
 // downloads media, runs the coding agent, and replies with the PR link.
 func (h *Handler) Process(ctx context.Context, trigger ParsedTweet) error {
 	h.Logger.Printf("[PROCESSING] Tweet %s from @%s: %s", trigger.ID, trigger.AuthorUsername, truncate(trigger.Text, 100))
+
+	// M6: Validate tweet ID is numeric before using as branch name
+	if !numericID.MatchString(trigger.ID) {
+		return fmt.Errorf("invalid tweet ID %q: must be numeric", trigger.ID)
+	}
+
+	// H4/L3: Check rate limit before proceeding
+	if err := h.checkRateLimit(); err != nil {
+		h.Logger.Printf("[RATE-LIMIT] %v", err)
+		return err
+	}
 
 	// 1. Fetch parent tweet (the actual bug report) if this is a reply
 	var bugText string
@@ -51,7 +119,8 @@ func (h *Handler) Process(ctx context.Context, trigger ParsedTweet) error {
 	if trigger.InReplyToID != "" {
 		parent, err := FetchParentTweet(h.Client, trigger.InReplyToID, h.Opts)
 		if err != nil {
-			h.Logger.Printf("[WARN] Could not fetch parent tweet %s: %v (using trigger text only)", trigger.InReplyToID, err)
+			// Finding #2: Sanitize InReplyToID in log output
+			h.Logger.Printf("[WARN] Could not fetch parent tweet %s: %v (using trigger text only)", truncate(trigger.InReplyToID, 30), err)
 			bugText = trigger.BugDescription
 			mediaURLs = trigger.MediaURLs
 		} else {
@@ -84,7 +153,7 @@ func (h *Handler) Process(ctx context.Context, trigger ParsedTweet) error {
 		}
 	}
 
-	// 3. Generate branch name
+	// 3. Generate branch name (M6: tweet ID validated as numeric above)
 	branchName := h.Config.BranchPrefix + trigger.ID
 
 	// 4. Dry run check
@@ -96,11 +165,14 @@ func (h *Handler) Process(ctx context.Context, trigger ParsedTweet) error {
 	}
 
 	// 5. Run the coding agent
+	// Finding #3: Record rate limit slot only when agent actually runs (not for dry-run/early-exit)
+	h.recordAgentRun()
 	h.Logger.Printf("[AGENT] Running %s agent...", h.Agent.Name())
 
 	founderNote := trigger.BugDescription
 	prompt := bugText
-	if bugAuthor != "" {
+	// Finding #6: Validate bugAuthor before including in prompt
+	if bugAuthor != "" && validHandle.MatchString(bugAuthor) {
 		prompt = fmt.Sprintf("Bug from @%s: %s", bugAuthor, bugText)
 	}
 
@@ -132,9 +204,64 @@ func (h *Handler) Process(ctx context.Context, trigger ParsedTweet) error {
 	return h.State.Save()
 }
 
+// safeHTTPClient creates an HTTP client with SSRF protections.
+// H1: Custom DialContext validates resolved IPs at connection time (prevents DNS rebinding TOCTOU).
+// H1: CheckRedirect validates redirect URLs against the allowlist.
+// M3: Explicit timeout prevents hanging on slow servers.
+func safeHTTPClient() *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid address %q: %w", addr, err)
+			}
+
+			// H1: Resolve and validate IP at connection time (not before)
+			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, fmt.Errorf("DNS lookup failed for %s: %w", host, err)
+			}
+			if len(ips) == 0 {
+				return nil, fmt.Errorf("no IP addresses found for %s", host)
+			}
+
+			for _, ipAddr := range ips {
+				ip := ipAddr.IP
+				// Issue #5: Normalize IPv6-mapped IPv4 addresses before validation
+				if ip4 := ip.To4(); ip4 != nil {
+					ip = ip4
+				}
+				if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
+					return nil, fmt.Errorf("blocked private/loopback IP %s for host %s", ip, host)
+				}
+			}
+
+			return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+		},
+	}
+
+	return &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("too many redirects")
+			}
+			// H1: Validate every redirect URL against the allowlist
+			if err := validateMediaURL(req.URL.String()); err != nil {
+				return fmt.Errorf("redirect blocked: %w", err)
+			}
+			return nil
+		},
+	}
+}
+
 // validateMediaURL checks that a URL is safe to download.
 // C2: Prevents SSRF by restricting to HTTPS and known media hosts.
-// M5: Enforces HTTPS.
+// H1: DNS/IP validation is now handled by safeHTTPClient's DialContext (no TOCTOU).
 func validateMediaURL(rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
@@ -153,26 +280,23 @@ func validateMediaURL(rawURL string) error {
 		return fmt.Errorf("blocked media host: %s (allowed: twimg.com domains)", host)
 	}
 
-	// C2: Verify host does not resolve to private/loopback IP
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return fmt.Errorf("DNS lookup failed for %s: %w", host, err)
-	}
-	for _, ip := range ips {
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-			return fmt.Errorf("blocked private/loopback IP for host %s", host)
-		}
-	}
-
 	return nil
 }
 
 // downloadMedia downloads media from URLs to a temp directory.
 func downloadMedia(urls []string) ([]string, error) {
+	// M4: Cap number of media URLs
+	if len(urls) > maxMediaURLs {
+		urls = urls[:maxMediaURLs]
+	}
+
 	tmpDir, err := os.MkdirTemp("", "xbot-media-*")
 	if err != nil {
 		return nil, fmt.Errorf("creating temp dir: %w", err)
 	}
+
+	// H1/M3: Use safe HTTP client with SSRF protection and timeouts
+	client := safeHTTPClient()
 
 	var files []string
 	for i, u := range urls {
@@ -181,18 +305,12 @@ func downloadMedia(urls []string) ([]string, error) {
 			continue // Skip invalid URLs
 		}
 
-		ext := filepath.Ext(u)
-		if ext == "" || len(ext) > 5 {
-			ext = ".jpg"
-		}
-		// Strip query params from extension
-		if idx := strings.Index(ext, "?"); idx != -1 {
-			ext = ext[:idx]
-		}
+		// M5: Parse URL properly, extract extension from path only
+		ext := safeMediaExtension(u)
 
 		filePath := filepath.Join(tmpDir, fmt.Sprintf("media_%d%s", i, ext))
 
-		resp, err := http.Get(u) //nolint:gosec // URL validated above
+		resp, err := client.Get(u)
 		if err != nil {
 			continue // Skip failed downloads
 		}
@@ -227,6 +345,21 @@ func downloadMedia(urls []string) ([]string, error) {
 	return files, nil
 }
 
+// safeMediaExtension extracts a safe file extension from a media URL.
+// M5: Parses URL properly, only uses path component, validates against allowlist.
+func safeMediaExtension(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return ".jpg"
+	}
+
+	ext := strings.ToLower(filepath.Ext(parsed.Path))
+	if allowedMediaExtensions[ext] {
+		return ext
+	}
+	return ".jpg" // Safe default
+}
+
 // cleanupMedia removes downloaded media files.
 func cleanupMedia(files []string) {
 	if len(files) == 0 {
@@ -238,6 +371,7 @@ func cleanupMedia(files []string) {
 }
 
 // truncate shortens a string for log output and strips control characters (L3).
+// L7: Uses rune-based length to avoid splitting multi-byte UTF-8 characters.
 func truncate(s string, maxLen int) string {
 	// L3: Strip control characters to prevent log injection/terminal escape sequences
 	s = strings.Map(func(r rune) rune {
@@ -249,8 +383,11 @@ func truncate(s string, maxLen int) string {
 		}
 		return r
 	}, s)
-	if len(s) > maxLen {
-		return s[:maxLen] + "..."
+
+	// L7: Count runes, not bytes
+	if utf8.RuneCountInString(s) > maxLen {
+		runes := []rune(s)
+		return string(runes[:maxLen]) + "..."
 	}
 	return s
 }
