@@ -154,9 +154,23 @@ func initCmd() *cobra.Command {
 		Short: "Initialize bot configuration",
 		Long: `Set up the bot configuration. Creates ~/.xbot with your settings.
 
+Only --handle is required. Everything else has sensible defaults:
+  - Repo defaults to the current directory
+  - Agent defaults to Claude Code
+  - Trigger defaults to "fix:" (the keyword you reply with on X)
+
 Examples:
-  xbot init --handle shallum --repo /path/to/project --agent claude
-  xbot init --handle shallum --repo . --agent codex --trigger "bug:"`,
+  # Minimal — use defaults (current dir, Claude Code, "fix:" trigger)
+  xbot init --handle shallum
+
+  # Specify a different repo and agent
+  xbot init --handle shallum --repo /path/to/project --agent codex
+
+  # Use a custom trigger keyword
+  xbot init --handle shallum --trigger "bug:"
+
+  # Bring your own agent
+  xbot init --handle shallum --agent custom --agent-cmd "my-tool --auto"`,
 		Run: func(cmd *cobra.Command, args []string) {
 			if handle == "" {
 				fmt.Fprintf(os.Stderr, "\033[31mError: --handle is required\033[0m\n")
