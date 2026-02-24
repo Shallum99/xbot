@@ -10,11 +10,8 @@ A user reports a bug on X. You reply `fix: description`. A coding agent fixes it
 # Install
 go install github.com/Shallum99/xbot@latest
 
-# Authenticate with X (requires xurl)
-go install github.com/xdevplatform/xurl@latest
-xurl auth app my-app --client-id YOUR_ID --client-secret YOUR_SECRET
-xurl auth default my-app
-xurl auth oauth2
+# Authenticate with X
+xbot auth --client-id YOUR_ID --client-secret YOUR_SECRET
 
 # Set up the bot
 xbot init --handle your_x_handle --repo /path/to/your/project --agent claude
