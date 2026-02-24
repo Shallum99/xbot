@@ -6,17 +6,39 @@ A user reports a bug on X. You reply `fix: description`. A coding agent fixes it
 
 ## Quick Start
 
+**1. Install**
+
+Requires [Go 1.24+](https://go.dev/dl/).
+
 ```bash
-# Install
 go install github.com/Shallum99/xbot@latest
+```
 
-# Authenticate with X
-xbot auth --client-id YOUR_ID --client-secret YOUR_SECRET
+**2. Get your X API credentials**
 
-# Set up the bot (from your project directory)
+Go to [developer.x.com](https://developer.x.com), create an app, and enable OAuth 2.0. Copy your **Client ID** and **Client Secret**.
+
+**3. Authenticate**
+
+```bash
+xbot auth --client-id YOUR_CLIENT_ID --client-secret YOUR_CLIENT_SECRET
+```
+
+This opens your browser to authorize xbot with your X account.
+
+**4. Set up the bot**
+
+Run this from your project directory:
+
+```bash
 xbot init --handle your_x_handle
+```
 
-# Start monitoring
+That's all you need — it defaults to Claude Code as the agent, `fix:` as the trigger, and the current directory as the repo. See `xbot init --help` for all options.
+
+**5. Start monitoring**
+
+```bash
 xbot start
 ```
 
@@ -40,14 +62,6 @@ Runs coding agent (Claude Code / Codex / Gemini)
 PR created on GitHub
 ```
 
-1. **You see a bug report** on X — a user's tweet, maybe with a screenshot
-2. **You reply** with `fix:` followed by a description or instruction
-3. **xbot detects** your reply via polling (`GET /2/tweets/search/recent` with `since_id`)
-4. **Fetches the parent tweet** to get the full bug context and any attached media
-5. **Runs a coding agent** as a subprocess in your repo directory
-6. **Agent fixes the bug**, creates a branch, pushes, and opens a PR
-7. **PR link is logged** to your terminal
-
 No separate bot account needed. xbot uses your own X authentication — if you can tweet, xbot can monitor your tweets.
 
 ## Features
@@ -64,30 +78,14 @@ No separate bot account needed. xbot uses your own X authentication — if you c
 
 **One bot per founder** — Uses your own OAuth2 token. No shared accounts, no access lists. Your auth is your identity.
 
-## Installation
-
-### From source
-
-```bash
-go install github.com/Shallum99/xbot@latest
-```
-
-Requires Go 1.24+.
-
-### Build locally
-
-```bash
-git clone https://github.com/Shallum99/xbot.git
-cd xbot
-go build -o xbot .
-```
-
 ## Prerequisites
 
-1. **X API credentials** — Create an app at [developer.x.com](https://developer.x.com). You need a Client ID and Client Secret with OAuth 2.0 enabled.
+1. **Go 1.24+** — [Install Go](https://go.dev/dl/)
 
-2. **A coding agent** — At least one of:
-   - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`)
+2. **X API credentials** — Create an app at [developer.x.com](https://developer.x.com) with OAuth 2.0 enabled
+
+3. **A coding agent** — At least one of:
+   - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`) — default
    - [Codex](https://github.com/openai/codex) (`codex`)
    - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`)
    - Any custom CLI tool
@@ -96,35 +94,36 @@ go build -o xbot .
 
 ### `xbot auth`
 
-Authenticate with the X API. Registers your app credentials and runs the OAuth2 flow in your browser.
+Authenticate with the X API. Saves your credentials and runs the OAuth2 flow in your browser.
 
 ```bash
 xbot auth --client-id YOUR_ID --client-secret YOUR_SECRET
 ```
 
-| Flag | Description |
-|---|---|
-| `--client-id` | X API Client ID (required) |
-| `--client-secret` | X API Client Secret (required) |
+You only need to run this once. Re-run it to update credentials or re-authenticate.
 
 ### `xbot init`
 
-Configure the bot. Creates `~/.xbot`.
+Configure the bot. Creates `~/.xbot`. Only `--handle` is required.
 
 ```bash
-xbot init --handle your_handle --repo /path/to/project --agent claude
+# Minimal — defaults to current dir, Claude Code, "fix:" trigger
+xbot init --handle shallum
+
+# Customize
+xbot init --handle shallum --repo /path/to/project --agent codex --trigger "bug:"
 ```
 
 | Flag | Default | Description |
 |---|---|---|
-| `--handle` | *(required)* | Your X handle (without @) |
-| `--repo` | `.` | Path to target git repository |
-| `--agent` | `claude` | Agent: `claude`, `codex`, `gemini`, `custom` |
-| `--agent-cmd` | | Custom agent command (when `--agent=custom`) |
-| `--trigger` | `fix:` | Keyword that triggers the bot |
-| `--poll-interval` | `60s` | How often to check for new tweets |
-| `--branch-prefix` | `bot/fix-` | Git branch prefix |
-| `--dry-run` | `false` | Log only, don't run agent |
+| `--handle` | *(required)* | Your X handle, without the @ |
+| `--repo` | `.` | Path to the git repo the agent will fix bugs in |
+| `--agent` | `claude` | Which coding agent to use: `claude`, `codex`, `gemini`, `custom` |
+| `--agent-cmd` | | Command to run when `--agent=custom` |
+| `--trigger` | `fix:` | The keyword you'll reply with on X to trigger a fix |
+| `--poll-interval` | `60s` | How often to check X for new trigger tweets |
+| `--branch-prefix` | `bot/fix-` | Prefix for git branches created by the agent |
+| `--dry-run` | `false` | Log what would happen without running the agent |
 
 ### `xbot start`
 
@@ -200,7 +199,7 @@ Keep it short — just guardrails. The agent explores the codebase on its own.
 Any CLI tool that reads a prompt from stdin and prints output to stdout works:
 
 ```bash
-xbot init --handle you --repo . --agent custom --agent-cmd "my-agent --auto"
+xbot init --handle you --agent custom --agent-cmd "my-agent --auto"
 ```
 
 The prompt is passed via:
@@ -231,34 +230,18 @@ xbot is designed to be safe for long-running, unattended use:
 - **File locking** — Advisory locks on state writes
 - **Log sanitization** — Control characters stripped from all output
 
-## Architecture
-
-```
-xbot
-├── main.go          # CLI entry point (Cobra commands)
-├── bot/
-│   ├── api.go       # X API request construction
-│   ├── config.go    # Bot config (YAML, validation)
-│   ├── state.go     # Polling state (persistence, pruning, locking)
-│   ├── tweet.go     # Tweet parsing, parent tweet fetching
-│   ├── agent.go     # Agent interface + Claude/Codex/Gemini/Custom
-│   ├── handler.go   # Pipeline orchestrator (fetch → media → agent → log)
-│   └── poller.go    # Polling loop with backoff
-└── go.mod           # Depends on github.com/xdevplatform/xurl
-```
-
-xbot imports [xurl](https://github.com/xdevplatform/xurl) as a Go library for X API authentication and HTTP request handling.
-
-## Contributing
-
-Contributions welcome. Please open an issue first to discuss what you'd like to change.
+## Build from source
 
 ```bash
 git clone https://github.com/Shallum99/xbot.git
 cd xbot
-go build ./...
+go build -o xbot .
 go test ./...
 ```
+
+## Contributing
+
+Contributions welcome. Please open an issue first to discuss what you'd like to change.
 
 ## License
 
