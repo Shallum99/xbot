@@ -5,7 +5,7 @@ AI-powered bug fix bot triggered from X. Standalone Go CLI that imports xurl as 
 ## Architecture
 
 ```
-main.go          → Cobra CLI (init, start, run, status commands)
+main.go          → Cobra CLI (auth, init, start, run, status commands)
 bot/api.go       → X API request construction (SearchTriggerTweets, FetchTweet)
 bot/config.go    → BotConfig struct, YAML persistence (~/.xbot), Validate()
 bot/state.go     → BotState (since_id, processed_ids), file locking, auto-pruning
