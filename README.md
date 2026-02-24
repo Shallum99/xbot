@@ -15,7 +15,7 @@ curl -sSfL https://raw.githubusercontent.com/Shallum99/xbot/main/install.sh | sh
 
 ```powershell
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/Shallum99/xbot/main/install.ps1 | iex
+iex (irm https://raw.githubusercontent.com/Shallum99/xbot/main/install.ps1)
 ```
 
 ```bash
