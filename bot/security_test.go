@@ -344,7 +344,9 @@ func TestLoadSkillFile_RespectsMaxSize(t *testing.T) {
 	for i := range data {
 		data[i] = 'A'
 	}
-	os.WriteFile(path, data, 0644)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
 
 	result := loadSkillFile(dir)
 	if result != "" {
