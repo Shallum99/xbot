@@ -37,7 +37,7 @@ bot/poller.go    → Polling loop with exponential backoff + graceful shutdown
 
 - `~/.xbot` — Bot config (handle, trigger, repo, agent, interval)
 - `~/.xbot-state` — Polling state (since_id, processed tweet IDs)
-- `~/.xurl` — Auth tokens (managed by xurl, not us)
+- `~/.xurl` — Auth tokens (created by `xbot auth`, uses xurl store format)
 - `.xbot.md` — Per-repo skill file for agent instructions (max 10KB)
 
 ## Security Measures
