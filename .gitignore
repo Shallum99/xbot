@@ -1,0 +1,4 @@
+xbot
+*.exe
+.xbot
+.xbot-state
