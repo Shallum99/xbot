@@ -69,8 +69,16 @@ type mediaData struct {
 	PreviewImageURL string `json:"preview_image_url,omitempty"`
 }
 
+// maxAPIResponseSize is the maximum size of an API response to parse (10MB).
+// Issue #7: Prevents OOM from oversized/malicious API responses.
+const maxAPIResponseSize = 10 * 1024 * 1024
+
 // ParseSearchResponse parses an X API v2 search response into ParsedTweets.
 func ParseSearchResponse(data json.RawMessage, triggerKeyword string) ([]ParsedTweet, error) {
+	if len(data) > maxAPIResponseSize {
+		return nil, fmt.Errorf("API response too large: %d bytes (max %d)", len(data), maxAPIResponseSize)
+	}
+
 	var resp searchResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return nil, fmt.Errorf("parsing search response: %w", err)
@@ -112,8 +120,9 @@ func ParseSearchResponse(data json.RawMessage, triggerKeyword string) ([]ParsedT
 		}
 
 		// Find parent tweet ID if this is a reply
+		// Finding #2: Validate referenced tweet IDs are numeric
 		for _, ref := range t.ReferencedTweets {
-			if ref.Type == "replied_to" {
+			if ref.Type == "replied_to" && sinceIDRegex.MatchString(ref.ID) {
 				pt.InReplyToID = ref.ID
 				break
 			}
@@ -136,6 +145,10 @@ func ParseSearchResponse(data json.RawMessage, triggerKeyword string) ([]ParsedT
 
 // ParseSingleTweet parses a single tweet response (from ReadPostWithMedia).
 func ParseSingleTweet(data json.RawMessage) (*ParsedTweet, error) {
+	if len(data) > maxAPIResponseSize {
+		return nil, fmt.Errorf("API response too large: %d bytes (max %d)", len(data), maxAPIResponseSize)
+	}
+
 	var resp struct {
 		Data     tweetData       `json:"data"`
 		Includes *searchIncludes `json:"includes,omitempty"`
@@ -172,8 +185,9 @@ func ParseSingleTweet(data json.RawMessage) (*ParsedTweet, error) {
 		ConversationID: t.ConversationID,
 	}
 
+	// Finding #2: Validate referenced tweet IDs are numeric
 	for _, ref := range t.ReferencedTweets {
-		if ref.Type == "replied_to" {
+		if ref.Type == "replied_to" && sinceIDRegex.MatchString(ref.ID) {
 			pt.InReplyToID = ref.ID
 			break
 		}
