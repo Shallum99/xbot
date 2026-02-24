@@ -2,12 +2,14 @@ package bot
 
 import (
 	"fmt"
+	htmltemplate "html/template"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"text/template"
+	"unicode"
 )
 
 // ServicePaths holds platform-specific paths for the background service.
@@ -88,10 +90,10 @@ func ServiceUninstall() error {
 	switch runtime.GOOS {
 	case "darwin":
 		// Unload from launchd
-		_ = runCmd("launchctl", "unload", paths.ConfigPath)
+		_ = runServiceCmd("launchctl", "unload", paths.ConfigPath)
 	case "linux":
 		// Disable from systemd
-		_ = runCmd("systemctl", "--user", "disable", "xbot")
+		_ = runServiceCmd("systemctl", "--user", "disable", "xbot")
 	}
 
 	if err := os.Remove(paths.ConfigPath); err != nil && !os.IsNotExist(err) {
@@ -99,7 +101,7 @@ func ServiceUninstall() error {
 	}
 
 	if runtime.GOOS == "linux" {
-		_ = runCmd("systemctl", "--user", "daemon-reload")
+		_ = runServiceCmd("systemctl", "--user", "daemon-reload")
 	}
 
 	return nil
@@ -118,9 +120,9 @@ func ServiceStart() error {
 
 	switch runtime.GOOS {
 	case "linux":
-		return runCmd("systemctl", "--user", "start", "xbot")
+		return runServiceCmd("systemctl", "--user", "start", "xbot")
 	case "darwin":
-		return runCmd("launchctl", "load", paths.ConfigPath)
+		return runServiceCmd("launchctl", "load", paths.ConfigPath)
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
@@ -130,13 +132,13 @@ func ServiceStart() error {
 func ServiceStop() error {
 	switch runtime.GOOS {
 	case "linux":
-		return runCmd("systemctl", "--user", "stop", "xbot")
+		return runServiceCmd("systemctl", "--user", "stop", "xbot")
 	case "darwin":
 		paths, err := GetServicePaths()
 		if err != nil {
 			return err
 		}
-		return runCmd("launchctl", "unload", paths.ConfigPath)
+		return runServiceCmd("launchctl", "unload", paths.ConfigPath)
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
@@ -175,6 +177,7 @@ func ServiceLogs() error {
 
 // ─── systemd ─────────────────────────────────────────────────────
 
+// H5: Env var values are quoted and sanitized to prevent directive injection.
 const systemdTemplate = `[Unit]
 Description=xbot — AI bug fix bot triggered from X
 After=network-online.target
@@ -187,7 +190,7 @@ Restart=on-failure
 RestartSec=10
 Environment=HOME={{.HomeDir}}
 {{- range .EnvVars}}
-Environment={{.}}
+Environment="{{.}}"
 {{- end}}
 
 [Install]
@@ -197,13 +200,14 @@ WantedBy=default.target
 func installSystemd(binPath string, paths *ServicePaths) error {
 	homeDir, _ := os.UserHomeDir()
 
+	// Issue #3: Sanitize BinPath and HomeDir to prevent systemd directive injection
 	data := struct {
 		BinPath string
 		HomeDir string
 		EnvVars []string
 	}{
-		BinPath: binPath,
-		HomeDir: homeDir,
+		BinPath: sanitizeForSystemd(binPath),
+		HomeDir: sanitizeForSystemd(homeDir),
 		EnvVars: collectEnvVars(),
 	}
 
@@ -216,15 +220,16 @@ func installSystemd(binPath string, paths *ServicePaths) error {
 		return fmt.Errorf("rendering template: %w", err)
 	}
 
-	if err := os.WriteFile(paths.ConfigPath, []byte(buf.String()), 0644); err != nil {
+	// H2: Write with 0600 permissions (was 0644) to protect API keys
+	if err := os.WriteFile(paths.ConfigPath, []byte(buf.String()), 0600); err != nil {
 		return fmt.Errorf("writing service file: %w", err)
 	}
 
 	// Reload and enable
-	if err := runCmd("systemctl", "--user", "daemon-reload"); err != nil {
+	if err := runServiceCmd("systemctl", "--user", "daemon-reload"); err != nil {
 		return fmt.Errorf("reloading systemd: %w", err)
 	}
-	if err := runCmd("systemctl", "--user", "enable", "xbot"); err != nil {
+	if err := runServiceCmd("systemctl", "--user", "enable", "xbot"); err != nil {
 		return fmt.Errorf("enabling service: %w", err)
 	}
 
@@ -233,7 +238,8 @@ func installSystemd(binPath string, paths *ServicePaths) error {
 
 // ─── launchd ─────────────────────────────────────────────────────
 
-const launchdTemplate = `<?xml version="1.0" encoding="UTF-8"?>
+// H5: Uses html/template for automatic XML escaping of values.
+const launchdTemplateStr = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -289,7 +295,8 @@ func installLaunchd(binPath string, paths *ServicePaths) error {
 	}
 
 	var buf strings.Builder
-	tmpl, err := template.New("launchd").Parse(launchdTemplate)
+	// H5: html/template auto-escapes XML special chars (<, >, &, ", ')
+	tmpl, err := htmltemplate.New("launchd").Parse(launchdTemplateStr)
 	if err != nil {
 		return fmt.Errorf("parsing template: %w", err)
 	}
@@ -297,7 +304,8 @@ func installLaunchd(binPath string, paths *ServicePaths) error {
 		return fmt.Errorf("rendering template: %w", err)
 	}
 
-	if err := os.WriteFile(paths.ConfigPath, []byte(buf.String()), 0644); err != nil {
+	// H2: Write with 0600 permissions (was 0644) to protect API keys
+	if err := os.WriteFile(paths.ConfigPath, []byte(buf.String()), 0600); err != nil {
 		return fmt.Errorf("writing plist: %w", err)
 	}
 
@@ -306,30 +314,57 @@ func installLaunchd(binPath string, paths *ServicePaths) error {
 
 // ─── helpers ─────────────────────────────────────────────────────
 
-// collectEnvVars returns KEY=VALUE strings for agent API keys.
+// sanitizeForSystemd strips control characters and characters that could break
+// systemd Environment= directive syntax (H5).
+// Finding #8: Strips quotes instead of escaping, since systemd does not support
+// backslash-escaped quotes inside quoted Environment= values.
+func sanitizeForSystemd(s string) string {
+	var buf strings.Builder
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			continue // Strip newlines, null bytes, etc.
+		}
+		if r == '"' || r == '\\' {
+			continue // Strip chars that break systemd quoting
+		}
+		buf.WriteRune(r)
+	}
+	return buf.String()
+}
+
+// collectEnvVars returns sanitized KEY=VALUE strings for agent API keys.
+// H5: Values are sanitized to prevent directive injection in systemd unit files.
 func collectEnvVars() []string {
 	var vars []string
 	for _, key := range []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"} {
 		if val := os.Getenv(key); val != "" {
-			vars = append(vars, key+"="+val)
+			vars = append(vars, key+"="+sanitizeForSystemd(val))
 		}
 	}
 	return vars
 }
 
 // collectEnvEntries returns key/value pairs for launchd plist.
+// H5: html/template handles XML escaping; we just strip control chars here.
 func collectEnvEntries() []envEntry {
 	var entries []envEntry
 	for _, key := range []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"} {
 		if val := os.Getenv(key); val != "" {
+			// Strip control chars; XML escaping handled by html/template
+			val = strings.Map(func(r rune) rune {
+				if unicode.IsControl(r) {
+					return -1
+				}
+				return r
+			}, val)
 			entries = append(entries, envEntry{Key: key, Value: val})
 		}
 	}
 	return entries
 }
 
-// runCmd runs a command and returns an error if it fails.
-func runCmd(name string, args ...string) error {
+// runServiceCmd runs a command and returns an error if it fails.
+func runServiceCmd(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
