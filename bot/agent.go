@@ -178,9 +178,10 @@ func buildPrompt(bugDesc string, founderNote string, mediaFiles []string, branch
 Instructions:
 1. Create a new git branch named '%s'
 2. Investigate and fix the bug
-3. Commit the fix with a clear message
-4. Push the branch and create a pull request
-5. Print the PR URL on the last line of output
+3. Stage ONLY the files you modified — use "git add <file>" for each file. NEVER use "git add ." or "git add -A"
+4. Commit the fix with a clear message
+5. Push the branch and create a pull request
+6. Print the PR URL on the last line of output
 `, branchName))
 
 	return sb.String()
