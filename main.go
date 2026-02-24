@@ -15,6 +15,7 @@ import (
 	"github.com/xdevplatform/xurl/api"
 	"github.com/xdevplatform/xurl/auth"
 	"github.com/xdevplatform/xurl/config"
+	"github.com/xdevplatform/xurl/store"
 
 	"github.com/Shallum99/xbot/bot"
 )
