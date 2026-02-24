@@ -34,7 +34,7 @@ type AgentResult struct {
 // Agent is the interface for coding agents that fix bugs.
 type Agent interface {
 	Name() string
-	Run(ctx context.Context, bugDesc string, mediaFiles []string, repo string, branchName string) (*AgentResult, error)
+	Run(ctx context.Context, bugDesc string, founderNote string, mediaFiles []string, repo string, branchName string) (*AgentResult, error)
 }
 
 // maxAgentOutput is the maximum bytes captured from agent stdout+stderr (10MB).
