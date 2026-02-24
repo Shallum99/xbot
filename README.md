@@ -8,7 +8,11 @@ A user reports a bug on X. You reply `fix: description`. A coding agent fixes it
 
 **1. Install**
 
-Download a pre-built binary from [Releases](https://github.com/Shallum99/xbot/releases), or install with Go:
+**Option A — Download binary (no Go required):**
+
+Go to [Releases](https://github.com/Shallum99/xbot/releases/latest), download the binary for your OS, and add it to your PATH.
+
+**Option B — Install with Go:**
 
 ```bash
 go install github.com/Shallum99/xbot@latest
