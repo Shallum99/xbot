@@ -468,3 +468,134 @@ func statusCmd() *cobra.Command {
 		},
 	}
 }
+
+// ─── service ─────────────────────────────────────────────────────
+
+func serviceCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "service",
+		Short: "Manage xbot as a background service (systemd/launchd)",
+		Long: `Run xbot 24/7 as a background service that starts on boot.
+
+Uses systemd on Linux and launchd on macOS — no sudo required.
+
+Examples:
+  xbot service install   # set up the background service
+  xbot service start     # start it
+  xbot service stop      # stop it
+  xbot service status    # check if it's running
+  xbot service logs      # tail the logs
+  xbot service uninstall # remove the service`,
+	}
+
+	cmd.AddCommand(serviceInstallCmd())
+	cmd.AddCommand(serviceUninstallCmd())
+	cmd.AddCommand(serviceStartCmd())
+	cmd.AddCommand(serviceStopCmd())
+	cmd.AddCommand(serviceStatusCmd())
+	cmd.AddCommand(serviceLogsCmd())
+
+	return cmd
+}
+
+func serviceInstallCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install",
+		Short: "Install xbot as a background service",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			// Verify bot config exists first
+			if _, err := bot.LoadConfig(); err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mError: %v\033[0m\n", err)
+				fmt.Fprintf(os.Stderr, "Run 'xbot init' first to configure the bot.\n")
+				os.Exit(1)
+			}
+
+			if err := bot.ServiceInstall(); err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mError: %v\033[0m\n", err)
+				os.Exit(1)
+			}
+
+			paths, _ := bot.GetServicePaths()
+			fmt.Printf("\033[32mService installed!\033[0m\n\n")
+			fmt.Printf("  Config: %s\n", paths.ConfigPath)
+			if paths.LogPath != "" {
+				fmt.Printf("  Logs:   %s\n", paths.LogPath)
+			}
+			fmt.Printf("\nRun '\033[1mxbot service start\033[0m' to start the service.\n")
+		},
+	}
+}
+
+func serviceUninstallCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove the xbot background service",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := bot.ServiceUninstall(); err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mError: %v\033[0m\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("\033[32mService uninstalled.\033[0m\n")
+		},
+	}
+}
+
+func serviceStartCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "start",
+		Short: "Start the xbot background service",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := bot.ServiceStart(); err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mError: %v\033[0m\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("\033[32mService started.\033[0m\n")
+			fmt.Printf("Run '\033[1mxbot service logs\033[0m' to watch output.\n")
+		},
+	}
+}
+
+func serviceStopCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stop",
+		Short: "Stop the xbot background service",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := bot.ServiceStop(); err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mError: %v\033[0m\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("\033[32mService stopped.\033[0m\n")
+		},
+	}
+}
+
+func serviceStatusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Check if the xbot service is running",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := bot.ServiceStatus(); err != nil {
+				os.Exit(1)
+			}
+		},
+	}
+}
+
+func serviceLogsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "logs",
+		Short: "Tail the xbot service logs",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := bot.ServiceLogs(); err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mError: %v\033[0m\n", err)
+				os.Exit(1)
+			}
+		},
+	}
+}
