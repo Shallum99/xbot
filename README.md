@@ -173,6 +173,21 @@ Bot State
   Processed:      3 tweet(s)
 ```
 
+### `xbot service`
+
+Run xbot 24/7 as a background service that starts on boot. Uses systemd on Linux and launchd on macOS — no sudo required.
+
+```bash
+xbot service install     # set up the background service
+xbot service start       # start it
+xbot service logs        # tail the logs
+xbot service stop        # stop it
+xbot service status      # check if it's running
+xbot service uninstall   # remove the service
+```
+
+Any agent API keys (e.g. `ANTHROPIC_API_KEY`) in your current environment are automatically baked into the service config.
+
 ## Configuration
 
 ### Config file (`~/.xbot`)
