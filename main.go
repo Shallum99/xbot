@@ -46,6 +46,7 @@ Setup:
 	rootCmd.AddCommand(startCmd())
 	rootCmd.AddCommand(runCmd())
 	rootCmd.AddCommand(statusCmd())
+	rootCmd.AddCommand(serviceCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
