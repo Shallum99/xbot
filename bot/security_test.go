@@ -87,9 +87,9 @@ func TestSafeMediaExtension_NoExtension(t *testing.T) {
 
 func TestSafeMediaExtension_PathTraversal(t *testing.T) {
 	ext := safeMediaExtension("https://pbs.twimg.com/media/abc.jpg/../../../etc/passwd")
-	// filepath.Ext of the path should not yield .jpg
+	// Should default to .jpg for unrecognized/traversal paths
 	if ext != ".jpg" {
-		// Acceptable — defaults to .jpg for unrecognized extensions
+		t.Errorf("expected .jpg default for path traversal, got %s", ext)
 	}
 }
 
