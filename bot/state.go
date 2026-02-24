@@ -2,6 +2,8 @@ package bot
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,27 +25,49 @@ type BotState struct {
 }
 
 // DefaultStatePath returns the default path for the bot state file.
-func DefaultStatePath() string {
+// L2: Returns error instead of falling back to current directory.
+func DefaultStatePath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		homeDir = "."
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".xbot-state")
+	return filepath.Join(homeDir, ".xbot-state"), nil
 }
 
 // LoadState reads the bot state from ~/.xbot-state.
-func LoadState() *BotState {
-	return LoadStateFromPath(DefaultStatePath())
+func LoadState() (*BotState, error) {
+	path, err := DefaultStatePath()
+	if err != nil {
+		return nil, err
+	}
+	return LoadStateFromPath(path), nil
 }
 
 // LoadStateFromPath reads the bot state from the given path.
+// Issue #8: Checks file permissions (like config file does).
+// Finding #7: Uses single file handle to eliminate TOCTOU (matching config loading).
 func LoadStateFromPath(path string) *BotState {
 	state := &BotState{
 		ProcessedIDs: make(map[string]string),
 		filePath:     path,
 	}
 
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
+	if err != nil {
+		return state
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return state
+	}
+	if mode := info.Mode().Perm(); mode&0077 != 0 {
+		log.Printf("[WARN] State file %s has permissive permissions %04o; fixing to 0600", path, mode)
+		_ = os.Chmod(path, 0600)
+	}
+
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return state
 	}
@@ -60,6 +84,7 @@ func LoadStateFromPath(path string) *BotState {
 }
 
 // Save writes the bot state to disk with file locking (M6) and pruning (M3).
+// M1: Acquires lock BEFORE truncating to prevent race conditions.
 func (s *BotState) Save() error {
 	// M3: Prune old processed IDs to prevent unbounded growth
 	s.pruneProcessedIDs()
@@ -69,18 +94,26 @@ func (s *BotState) Save() error {
 		return fmt.Errorf("marshaling state: %w", err)
 	}
 
-	// M6: Use file locking to prevent race conditions
-	f, err := os.OpenFile(s.filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	// M1: Open WITHOUT O_TRUNC — acquire lock first, then truncate
+	f, err := os.OpenFile(s.filePath, os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		return fmt.Errorf("opening state file: %w", err)
 	}
 	defer f.Close()
 
-	// Advisory lock — blocks if another process holds it
+	// L6: Lock with timeout (non-blocking + retry in lockFile)
 	if err := lockFile(f.Fd()); err != nil {
 		return fmt.Errorf("locking state file: %w", err)
 	}
 	defer unlockFile(f.Fd()) //nolint:errcheck
+
+	// M1: Truncate AFTER acquiring the lock
+	if err := f.Truncate(0); err != nil {
+		return fmt.Errorf("truncating state file: %w", err)
+	}
+	if _, err := f.Seek(0, 0); err != nil {
+		return fmt.Errorf("seeking state file: %w", err)
+	}
 
 	if _, err := f.Write(data); err != nil {
 		return fmt.Errorf("writing state: %w", err)

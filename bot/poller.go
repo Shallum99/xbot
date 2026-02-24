@@ -43,8 +43,11 @@ func (p *Poller) Run(ctx context.Context) error {
 		if err != nil {
 			p.Logger.Printf("[ERROR] Poll failed: %v", err)
 			// Exponential backoff on error (up to 5 minutes)
-			backoff = backoff * 2
-			if backoff > 5*time.Minute {
+			// Issue #12: Check cap before multiply to prevent int64 overflow on sustained errors
+			if backoff < 5*time.Minute {
+				backoff = backoff * 2
+			}
+			if backoff > 5*time.Minute || backoff <= 0 {
 				backoff = 5 * time.Minute
 			}
 			p.Logger.Printf("[BOT] Backing off for %s", backoff)

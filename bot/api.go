@@ -45,8 +45,13 @@ func SearchTriggerTweets(client api.Client, query string, sinceID string, maxRes
 }
 
 // FetchTweet fetches a single tweet with media expansions.
+// M2: Validates that post ID is purely numeric to prevent path injection in API URL.
 func FetchTweet(client api.Client, postID string, opts api.RequestOptions) (json.RawMessage, error) {
 	postID = ResolvePostID(postID)
+
+	if !sinceIDRegex.MatchString(postID) {
+		return nil, fmt.Errorf("invalid post ID %q: must be numeric", postID)
+	}
 
 	opts.Method = "GET"
 	opts.Endpoint = fmt.Sprintf(

@@ -2,6 +2,8 @@ package bot
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,6 +23,12 @@ const (
 
 var validHandle = regexp.MustCompile(`^[a-zA-Z0-9_]{1,15}$`)
 
+// validTriggerKeyword allows only safe characters in trigger keywords (M8).
+var validTriggerKeyword = regexp.MustCompile(`^[a-zA-Z0-9:_ .\-]+$`)
+
+// validBranchPrefix allows only safe characters in branch prefixes (Issue #10).
+var validBranchPrefix = regexp.MustCompile(`^[a-zA-Z0-9/_\-\.]+$`)
+
 // BotConfig holds the configuration for the bot.
 type BotConfig struct {
 	Handle         string        `yaml:"handle"`
@@ -34,26 +42,49 @@ type BotConfig struct {
 }
 
 // DefaultConfigPath returns the default path for the bot config file.
-func DefaultConfigPath() string {
+// L2: Returns error instead of falling back to current directory.
+func DefaultConfigPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		homeDir = "."
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".xbot")
+	return filepath.Join(homeDir, ".xbot"), nil
 }
 
 // LoadConfig reads the bot config from ~/.xbot.
 func LoadConfig() (*BotConfig, error) {
-	return LoadConfigFromPath(DefaultConfigPath())
+	path, err := DefaultConfigPath()
+	if err != nil {
+		return nil, err
+	}
+	return LoadConfigFromPath(path)
 }
 
 // LoadConfigFromPath reads the bot config from the given path.
+// Issue #11: Uses single file handle to eliminate TOCTOU between Stat and Read.
 func LoadConfigFromPath(path string) (*BotConfig, error) {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("bot not configured – run 'xbot init' first")
 		}
+		return nil, fmt.Errorf("reading config: %w", err)
+	}
+	defer f.Close()
+
+	// L1: Check file permissions on the open handle (no TOCTOU)
+	info, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("reading config: %w", err)
+	}
+
+	if mode := info.Mode().Perm(); mode&0077 != 0 {
+		log.Printf("[WARN] Config file %s has permissive permissions %04o; fixing to 0600", path, mode)
+		_ = os.Chmod(path, 0600)
+	}
+
+	data, err := io.ReadAll(f)
+	if err != nil {
 		return nil, fmt.Errorf("reading config: %w", err)
 	}
 
@@ -68,7 +99,11 @@ func LoadConfigFromPath(path string) (*BotConfig, error) {
 
 // Save writes the bot config to ~/.xbot.
 func (c *BotConfig) Save() error {
-	return c.SaveToPath(DefaultConfigPath())
+	path, err := DefaultConfigPath()
+	if err != nil {
+		return err
+	}
+	return c.SaveToPath(path)
 }
 
 // SaveToPath writes the bot config to the given path.
@@ -113,12 +148,12 @@ func (c *BotConfig) Validate() error {
 		return fmt.Errorf("invalid handle %q: must be 1-%d alphanumeric/underscore characters", c.Handle, maxHandleLen)
 	}
 
-	// M2: Validate trigger keyword — no shell-dangerous chars, bounded length
+	// M2+M8: Validate trigger keyword — strict allowlist of safe characters
 	if len(c.TriggerKeyword) > maxTriggerKeywordLen {
 		return fmt.Errorf("trigger keyword too long (max %d characters)", maxTriggerKeywordLen)
 	}
-	if strings.ContainsAny(c.TriggerKeyword, "\"'`\\$") {
-		return fmt.Errorf("trigger keyword contains unsafe characters (quotes, backslashes, or dollar signs)")
+	if !validTriggerKeyword.MatchString(c.TriggerKeyword) {
+		return fmt.Errorf("trigger keyword contains unsafe characters (allowed: alphanumeric, colon, underscore, space, period, hyphen)")
 	}
 
 	// M4: Validate repo path — must be absolute and exist as a directory
@@ -139,8 +174,12 @@ func (c *BotConfig) Validate() error {
 	if len(c.BranchPrefix) > maxBranchPrefixLen {
 		return fmt.Errorf("branch prefix too long (max %d characters)", maxBranchPrefixLen)
 	}
+	// Issue #10: Validate branch prefix characters to prevent prompt injection via branch name
+	if c.BranchPrefix != "" && !validBranchPrefix.MatchString(c.BranchPrefix) {
+		return fmt.Errorf("branch prefix contains unsafe characters (allowed: alphanumeric, /, _, -, .)")
+	}
 
-	// C1: Validate custom agent command — reject shell metacharacters
+	// C1/C3: Validate custom agent command — reject all shell metacharacters
 	if c.Agent == "custom" {
 		if c.AgentCmd == "" {
 			return fmt.Errorf("custom agent requires agent_cmd to be set")
@@ -148,8 +187,9 @@ func (c *BotConfig) Validate() error {
 		if len(c.AgentCmd) > maxAgentCmdLen {
 			return fmt.Errorf("agent_cmd too long (max %d characters)", maxAgentCmdLen)
 		}
-		if strings.ContainsAny(c.AgentCmd, ";|&$`\\(){}") {
-			return fmt.Errorf("agent_cmd contains unsafe shell metacharacters (;|&$`\\(){})")
+		// C3: Block all shell metacharacters including <, >, ~, !, #, newlines
+		if strings.ContainsAny(c.AgentCmd, ";|&$`\\(){}\"'<>~!#\n\r") {
+			return fmt.Errorf("agent_cmd contains unsafe shell metacharacters")
 		}
 	}
 
