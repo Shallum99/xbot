@@ -8,7 +8,7 @@ A user reports a bug on X. You reply `fix: description`. A coding agent fixes it
 
 **1. Install**
 
-Requires [Go 1.24+](https://go.dev/dl/).
+Download a pre-built binary from [Releases](https://github.com/Shallum99/xbot/releases), or install with Go:
 
 ```bash
 go install github.com/Shallum99/xbot@latest
