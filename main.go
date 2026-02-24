@@ -85,9 +85,18 @@ Get your Client ID and Client Secret from https://developer.x.com
 Examples:
   xbot auth --client-id YOUR_ID --client-secret YOUR_SECRET`,
 		Run: func(cmd *cobra.Command, args []string) {
+			// L5: Support env vars to avoid exposing secrets in process args
+			if clientID == "" {
+				clientID = os.Getenv("XBOT_CLIENT_ID")
+			}
+			if clientSecret == "" {
+				clientSecret = os.Getenv("XBOT_CLIENT_SECRET")
+			}
+
 			if clientID == "" || clientSecret == "" {
 				fmt.Fprintf(os.Stderr, "\033[31mError: --client-id and --client-secret are required\033[0m\n")
 				fmt.Fprintf(os.Stderr, "\nGet your credentials at https://developer.x.com\n")
+				fmt.Fprintf(os.Stderr, "Or set XBOT_CLIENT_ID and XBOT_CLIENT_SECRET environment variables.\n")
 				os.Exit(1)
 			}
 
@@ -286,7 +295,11 @@ Examples:
 			}
 
 			client, opts := newClient()
-			state := bot.LoadState()
+			state, err := bot.LoadState()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mError: %v\033[0m\n", err)
+				os.Exit(1)
+			}
 			logger := log.New(os.Stdout, "", log.LstdFlags)
 
 			handler := &bot.Handler{
@@ -390,7 +403,11 @@ Examples:
 
 			tweet.BugDescription = bot.ExtractBugDesc(tweet.Text, cfg.TriggerKeyword)
 
-			state := bot.LoadState()
+			state, err := bot.LoadState()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mError: %v\033[0m\n", err)
+				os.Exit(1)
+			}
 
 			handler := &bot.Handler{
 				Config: cfg,
@@ -439,7 +456,11 @@ func statusCmd() *cobra.Command {
 			fmt.Printf("  Branch Prefix:  %s\n", cfg.BranchPrefix)
 			fmt.Printf("  Dry Run:        %v\n", cfg.DryRun)
 
-			state := bot.LoadState()
+			state, err := bot.LoadState()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mError: %v\033[0m\n", err)
+				os.Exit(1)
+			}
 			fmt.Println("\n\033[1mBot State\033[0m")
 			sinceID := state.SinceID
 			if sinceID == "" {
