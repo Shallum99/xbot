@@ -13,8 +13,8 @@ go install github.com/Shallum99/xbot@latest
 # Authenticate with X
 xbot auth --client-id YOUR_ID --client-secret YOUR_SECRET
 
-# Set up the bot
-xbot init --handle your_x_handle --repo /path/to/your/project --agent claude
+# Set up the bot (from your project directory)
+xbot init --handle your_x_handle
 
 # Start monitoring
 xbot start
