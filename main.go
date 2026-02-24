@@ -20,10 +20,13 @@ import (
 	"github.com/Shallum99/xbot/bot"
 )
 
+var version = "dev"
+
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "xbot",
-		Short: "AI-powered bug fix bot triggered from X",
+		Use:     "xbot",
+		Short:   "AI-powered bug fix bot triggered from X",
+		Version: version,
 		Long: `xbot monitors X for trigger tweets and automatically fixes bugs using coding agents.
 
 How it works:
