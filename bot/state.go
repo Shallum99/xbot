@@ -77,10 +77,10 @@ func (s *BotState) Save() error {
 	defer f.Close()
 
 	// Advisory lock — blocks if another process holds it
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := lockFile(f.Fd()); err != nil {
 		return fmt.Errorf("locking state file: %w", err)
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN) //nolint:errcheck
+	defer unlockFile(f.Fd()) //nolint:errcheck
 
 	if _, err := f.Write(data); err != nil {
 		return fmt.Errorf("writing state: %w", err)
