@@ -42,6 +42,7 @@ Requires xurl authentication:
   xurl auth oauth2`,
 	}
 
+	rootCmd.AddCommand(authCmd())
 	rootCmd.AddCommand(initCmd())
 	rootCmd.AddCommand(startCmd())
 	rootCmd.AddCommand(runCmd())
