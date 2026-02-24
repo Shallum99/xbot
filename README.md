@@ -94,6 +94,19 @@ go build -o xbot .
 
 ## Commands
 
+### `xbot auth`
+
+Authenticate with the X API. Registers your app credentials and runs the OAuth2 flow in your browser.
+
+```bash
+xbot auth --client-id YOUR_ID --client-secret YOUR_SECRET
+```
+
+| Flag | Description |
+|---|---|
+| `--client-id` | X API Client ID (required) |
+| `--client-secret` | X API Client Secret (required) |
+
 ### `xbot init`
 
 Configure the bot. Creates `~/.xbot`.
