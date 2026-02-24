@@ -225,14 +225,14 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVar(&handle, "handle", "", "Your X handle to monitor for triggers (required)")
-	cmd.Flags().StringVar(&repo, "repo", ".", "Path to target git repository")
-	cmd.Flags().StringVar(&agent, "agent", "claude", "Coding agent: claude, codex, gemini, custom")
-	cmd.Flags().StringVar(&agentCmd, "agent-cmd", "", "Custom agent command (for --agent=custom)")
-	cmd.Flags().DurationVar(&pollInterval, "poll-interval", 60*time.Second, "Polling interval")
-	cmd.Flags().StringVar(&branchPrefix, "branch-prefix", "bot/fix-", "Git branch prefix")
-	cmd.Flags().StringVar(&triggerKw, "trigger", "fix:", "Keyword trigger (e.g. 'fix:', 'bug:')")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Log only, don't execute agent")
+	cmd.Flags().StringVar(&handle, "handle", "", "Your X handle, without the @ (required)")
+	cmd.Flags().StringVar(&repo, "repo", ".", "Path to the git repo the agent will fix bugs in")
+	cmd.Flags().StringVar(&agent, "agent", "claude", "Which coding agent to use: claude, codex, gemini, or custom")
+	cmd.Flags().StringVar(&agentCmd, "agent-cmd", "", "Command to run when --agent=custom (e.g. \"my-tool --auto\")")
+	cmd.Flags().DurationVar(&pollInterval, "poll-interval", 60*time.Second, "How often to check X for new trigger tweets")
+	cmd.Flags().StringVar(&branchPrefix, "branch-prefix", "bot/fix-", "Prefix for git branches created by the agent")
+	cmd.Flags().StringVar(&triggerKw, "trigger", "fix:", "The keyword you'll reply with on X to trigger a fix")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Log what would happen without actually running the agent")
 
 	return cmd
 }
